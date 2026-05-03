@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>英語朗讀/演說評審快記工具 - 奕鈞老師</title>
+  
+  <!-- 引入 Tailwind CSS 進行切版與樣式設定 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- 引入 FontAwesome 圖示庫 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- 引入 React 與 ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- 引入 Babel 以在瀏覽器編譯 JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+      -webkit-appearance: none; 
+      margin: 0; 
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background-color: #cbd5e1;
+      border-radius: 20px;
+    }
+    
+    @keyframes fadeInDownToast {
+      from { opacity: 0; transform: translate(-50%, -20px); }
+      to { opacity: 1; transform: translate(-50%, 0); }
+    }
+    .animate-fade-in-down-toast {
+      animation: fadeInDownToast 0.3s ease-out forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.3s ease-out forwards;
+    }
+
+    @keyframes scaleUp {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .animate-scale-up {
+      animation: scaleUp 0.3s ease-out forwards;
+    }
+  </style>
+</head>
+<body class="transition-colors duration-500">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // 自訂 Hook：LocalStorage 封裝，實現自動儲存
+    function useLocalStorage(key, initialValue) {
+      const [storedValue, setStoredValue] = useState(() => {
+        try {
+          const item = window.localStorage.getItem(key);
+          return item ? JSON.parse(item) : initialValue;
+        } catch (error) {
+          console.error(error);
+          return initialValue;
+        }
+      });
+
+      useEffect(() => {
+        try {
+          window.localStorage.setItem(key, JSON.stringify(storedValue));
+        } catch (error) {
+          console.error(error);
+        }
+      }, [key, storedValue]);
+
+      return [storedValue, setStoredValue];
+    }
+
+    const TONES = [
+      { id: 'encouraging', label: '正面鼓勵' },
+      { id: 'objective', label: '中肯建議' },
+      { id: 'strict', label: '嚴謹叮嚀' },
+      { id: 'warm', label: '溫暖感性' }
+    ];
+
+    const LENGTHS = [
+      { id: 'short', label: '50-100字' },
+      { id: 'medium', label: '100-150字' },
+      { id: 'long', label: '150-250字' }
+    ];
+
+    // 英語朗讀專用標籤
+    const INITIAL_READING_TAG_CATEGORIES = [
+      {
+        title: '語音：發音、連音與重音',
+        strengths: ['發音道地標準', '咬字清晰精準', '元音(母音)長短分明', '輔音(子音)結尾清晰', '單字重音正確', '連音(Liaison)流暢自然', '語音節奏感強'],
+        weaknesses: ['發音含糊不清', '單字重音錯誤', '漏掉結尾輔音', '語音平淡無節奏', '缺乏連音技巧', '母音長短音不分', '易混淆音辨識不清']
+      },
+      {
+        title: '氣勢：句讀、語調與感情',
+        strengths: ['語調抑揚頓挫', '意群(Sense Group)停頓得宜', '充分理解文意', '情感真摯動人', '語速適中流暢', '重點單字強調(Emphasis)明確', '句末升降調自然'],
+        weaknesses: ['語調平鋪直敘(Monotone)', '斷句不當/讀破句', '語速過快/過慢', '缺乏情感起伏', '機械式朗讀', '停頓過於突兀', '讀音吞吐猶豫']
+      },
+      {
+        title: '儀態：台風、表情與肢體',
+        strengths: ['儀態大方端莊', '自信從容', '眼神交流自然', '表情隨文意變化', '站姿挺拔優美', '肢體動作自然輔助', '臺風穩健'],
+        weaknesses: ['眼神游移/緊盯稿件', '肢體僵硬', '過度緊張', '小動作過多', '捧稿姿勢不佳', '站姿歪斜', '缺乏表情互動']
+      },
+      {
+        title: '補充：加分/備註項',
+        strengths: ['角色對話語氣生動', '成功營造文章氛圍', '結尾餘韻十足', '臨場反應佳（如遇忘詞能自然化解）'],
+        weaknesses: [] 
+      }
+    ];
+
+    // 英語演說專用標籤 (新增)
+    const INITIAL_SPEECH_TAG_CATEGORIES = [
+      {
+        title: '語音 ：發音、語調、流暢度',
+        strengths: ['發音精準清晰', '語調抑揚頓挫', '語速流暢自然', '重音強調得宜', '語氣展現說服力', '運用停頓強化重點', '展現道地口語節奏'],
+        weaknesses: ['發音含糊影響理解', '語調平淡缺乏起伏', '贅字過多 (Um/Ah...)', '語速過快/斷續', '句間停頓不自然', '單字重音錯誤', '機械式背誦感過重']
+      },
+      {
+        title: '內容 ：見解、結構、詞彙',
+        strengths: ['主題明確有見解', '結構嚴謹(開場/本文/結論)', '詞彙豐富且精確', '轉折詞運用流暢', '邏輯層次分明', '開場引人入勝', '結論有力具啟發性'],
+        weaknesses: ['邏輯鬆散缺乏焦點', '詞彙貧乏重疊', '內容偏離主題', '結構不完整', '缺乏具體實例支撐', '語法錯誤頻繁', '轉折過於生硬']
+      },
+      {
+        title: '儀態 ：儀容、態度、動作表情',
+        strengths: ['臺風穩健自信', '眼神交流遍及全場', '肢體動作自然大方', '表情與內容契合', '儀容整潔得體', '充滿熱情與感染力', '展現個人演說魅力'],
+        weaknesses: ['眼神游移或低頭', '肢體僵硬/過度緊張', '小動作多(如晃動)', '表情生硬不自然', '站姿不正/倚靠講桌', '讀稿感過重', '缺乏與觀眾的連結']
+      },
+      {
+        title: '補充：加分/備註項',
+        strengths: ['即興表現佳', '反應敏捷', '臨場發揮生動有趣'],
+        weaknesses: []
+      }
+    ];
+
+    const TOTAL_STUDENTS = 30;
+
+    // 主題配色設定：馬卡龍紫 (朗讀) vs 馬卡龍橘 (演說)
+    const THEME_COLORS = {
+      reading: {
+        wrapper: 'bg-purple-50/50',
+        iconWrap: 'text-purple-600',
+        badge: 'bg-purple-100 text-purple-700',
+        badgeOutline: 'bg-white border-purple-200 text-purple-700',
+        btnSolid: 'bg-purple-600 hover:bg-purple-700 shadow-purple-200',
+        btnOutline: 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200',
+        ring: 'focus:ring-purple-100 focus:border-purple-400',
+        topicActive: 'bg-purple-100 border-purple-300 text-purple-800',
+        topicHover: 'hover:bg-purple-50 hover:border-purple-200',
+        iconSolid: 'bg-purple-500',
+        dotActive: 'bg-purple-400',
+        sectionTitle: 'bg-purple-50 text-purple-800',
+        textareaBg: 'bg-purple-50/30 border-purple-100 focus:ring-purple-200',
+        textDark: 'text-purple-800',
+        textMedium: 'text-purple-700',
+      },
+      speech: {
+        wrapper: 'bg-orange-50/50',
+        iconWrap: 'text-orange-600',
+        badge: 'bg-orange-100 text-orange-700',
+        badgeOutline: 'bg-white border-orange-200 text-orange-700',
+        btnSolid: 'bg-orange-500 hover:bg-orange-600 shadow-orange-200',
+        btnOutline: 'bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200',
+        ring: 'focus:ring-orange-100 focus:border-orange-400',
+        topicActive: 'bg-orange-100 border-orange-300 text-orange-800',
+        topicHover: 'hover:bg-orange-50 hover:border-orange-200',
+        iconSolid: 'bg-orange-400',
+        dotActive: 'bg-orange-400',
+        sectionTitle: 'bg-orange-50 text-orange-800',
+        textareaBg: 'bg-orange-50/30 border-orange-100 focus:ring-orange-200',
+        textDark: 'text-orange-800',
+        textMedium: 'text-orange-700',
+      }
+    };
+
+    function App() {
+      // 模式切換：'reading' (朗讀) 或 'speech' (演說)
+      const [activeMode, setActiveMode] = useLocalStorage('app_v1.1_activeMode', 'reading');
+      
+      const generateInitialStudents = () => Array.from({ length: TOTAL_STUDENTS }).map((_, idx) => ({
+        id: idx + 1, classId: '', name: '', topic: '', timeMin: '', timeSec: '', selectedTags: [], personalExperience: '', generatedComment: ''
+      }));
+
+      // --- 英語朗讀 狀態區 ---
+      const [readingStudents, setReadingStudents] = useLocalStorage('app_v1.1_readingStudents', generateInitialStudents());
+      const [readingTopics, setReadingTopics] = useLocalStorage('app_v1.1_readingTopics', []);
+      const [readingTags, setReadingTags] = useLocalStorage('app_v1.1_readingTags', INITIAL_READING_TAG_CATEGORIES);
+      const [readingCustomTags, setReadingCustomTags] = useLocalStorage('app_v1.1_readingCustomTags', []);
+      const [readingTime, setReadingTime] = useLocalStorage('app_v1.1_readingTime', { min: 2, max: 3 });
+      const [readingCurrentId, setReadingCurrentId] = useLocalStorage('app_v1.1_readingCurrentId', 1);
+
+      // --- 英語演說 狀態區 ---
+      const [speechStudents, setSpeechStudents] = useLocalStorage('app_v1.1_speechStudents', generateInitialStudents());
+      const [speechTopics, setSpeechTopics] = useLocalStorage('app_v1.1_speechTopics', []);
+      const [speechTags, setSpeechTags] = useLocalStorage('app_v1.1_speechTags', INITIAL_SPEECH_TAG_CATEGORIES);
+      const [speechCustomTags, setSpeechCustomTags] = useLocalStorage('app_v1.1_speechCustomTags', []);
+      const [speechTime, setSpeechTime] = useLocalStorage('app_v1.1_speechTime', { min: 3, max: 4 });
+      const [speechCurrentId, setSpeechCurrentId] = useLocalStorage('app_v1.1_speechCurrentId', 1);
+
+      // --- 共用與介面狀態 ---
+      const [globalSettings, setGlobalSettings] = useLocalStorage('app_v1.1_globalSettings', { tone: 'encouraging', length: 'medium' });
+      const [newTopicInput, setNewTopicInput] = useState('');
+      const [isEditingTags, setIsEditingTags] = useState(false);
+      const [newTagInputs, setNewTagInputs] = useState({});
+      const [newGlobalTagInput, setNewGlobalTagInput] = useState('');
+      const [toastMessage, setToastMessage] = useState(null);
+      const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+      const fileInputRef = useRef(null);
+
+      // 動態切換參考變數
+      const isReading = activeMode === 'reading';
+      const modeName = isReading ? '朗讀' : '演說';
+      const th = isReading ? THEME_COLORS.reading : THEME_COLORS.speech;
+
+      const studentsData = isReading ? readingStudents : speechStudents;
+      const setStudentsData = isReading ? setReadingStudents : setSpeechStudents;
+      const globalTopics = isReading ? readingTopics : speechTopics;
+      const setGlobalTopics = isReading ? setReadingTopics : setSpeechTopics;
+      const tagCategories = isReading ? readingTags : speechTags;
+      const setTagCategories = isReading ? setReadingTags : setSpeechTags;
+      const globalCustomTags = isReading ? readingCustomTags : speechCustomTags;
+      const setGlobalCustomTags = isReading ? setReadingCustomTags : setSpeechCustomTags;
+      
+      const minTimeLimit = isReading ? readingTime.min : speechTime.min;
+      const setMinTimeLimit = (val) => isReading ? setReadingTime(p => ({...p, min: val})) : setSpeechTime(p => ({...p, min: val}));
+      const maxTimeLimit = isReading ? readingTime.max : speechTime.max;
+      const setMaxTimeLimit = (val) => isReading ? setReadingTime(p => ({...p, max: val})) : setSpeechTime(p => ({...p, max: val}));
+
+      const currentId = isReading ? readingCurrentId : speechCurrentId;
+      const setCurrentId = isReading ? setReadingCurrentId : setSpeechCurrentId;
+
+      const currentStudent = studentsData[currentId - 1] || studentsData[0];
+
+      // 由於切換模式可能造成短暫的不同步，加強防護
+      if (!currentStudent) return null;
+
+      const updateCurrentStudent = (updates) => {
+        setStudentsData(prev => prev.map(student => 
+          student.id === currentId ? { ...student, ...updates } : student
+        ));
+      };
+
+      const toggleTag = (tag) => {
+        if (isEditingTags) return; 
+        const isSelected = currentStudent.selectedTags.includes(tag);
+        if (isSelected) {
+          updateCurrentStudent({ selectedTags: currentStudent.selectedTags.filter(t => t !== tag) });
+        } else {
+          updateCurrentStudent({ selectedTags: [...currentStudent.selectedTags, tag] });
+        }
+      };
+
+      const removeTagFromAllStudents = (tagToRemove) => {
+        setStudentsData(prev => prev.map(student => ({
+          ...student,
+          selectedTags: student.selectedTags.filter(t => t !== tagToRemove)
+        })));
+      };
+
+      const handleAddTopic = () => {
+        const val = newTopicInput.trim();
+        if (val && !globalTopics.includes(val)) {
+          setGlobalTopics([...globalTopics, val]);
+          setNewTopicInput('');
+          showToast(`已新增${modeName}篇目`);
+        }
+      };
+
+      const handleRemoveTopic = (topicToRemove) => {
+        if (window.confirm(`確定要刪除篇目「${topicToRemove}」嗎？已選取此篇目的選手，其題目欄位將會清空。`)) {
+          setGlobalTopics(globalTopics.filter(t => t !== topicToRemove));
+          setStudentsData(prev => prev.map(student => ({
+            ...student,
+            topic: student.topic === topicToRemove ? '' : student.topic
+          })));
+        }
+      };
+
+      const handleMoveTag = (catIdx, type, tagIdx, direction) => {
+        setTagCategories(prev => {
+          const newCat = [...prev];
+          const tags = [...newCat[catIdx][type]];
+          if (tagIdx + direction < 0 || tagIdx + direction >= tags.length) return prev;
+          
+          const temp = tags[tagIdx];
+          tags[tagIdx] = tags[tagIdx + direction];
+          tags[tagIdx + direction] = temp;
+          
+          newCat[catIdx][type] = tags;
+          return newCat;
+        });
+      };
+
+      const handleRemoveTag = (catIdx, type, tagIdx) => {
+        const tagToRemove = tagCategories[catIdx][type][tagIdx];
+        if (window.confirm(`確定要刪除標籤「${tagToRemove}」嗎？這將會同步移除選手已選取的該標籤。`)) {
+          setTagCategories(prev => {
+            const newCat = [...prev];
+            newCat[catIdx][type] = newCat[catIdx][type].filter((_, i) => i !== tagIdx);
+            return newCat;
+          });
+          removeTagFromAllStudents(tagToRemove);
+        }
+      };
+
+      const handleAddTag = (catIdx, type) => {
+        const inputKey = `${catIdx}-${type}`;
+        const val = (newTagInputs[inputKey] || '').trim();
+        if (val && !tagCategories[catIdx][type].includes(val)) {
+          setTagCategories(prev => {
+            const newCat = [...prev];
+            newCat[catIdx][type] = [...newCat[catIdx][type], val];
+            return newCat;
+          });
+          setNewTagInputs(prev => ({ ...prev, [inputKey]: '' }));
+        }
+      };
+
+      const addGlobalCustomTag = () => {
+        const val = newGlobalTagInput.trim();
+        if (val && !globalCustomTags.includes(val)) {
+          setGlobalCustomTags([...globalCustomTags, val]);
+          setNewGlobalTagInput('');
+          showToast("已新增全域自訂標籤");
+        }
+      };
+
+      const removeGlobalCustomTag = (tag) => {
+        if (window.confirm(`確定要刪除自訂標籤「${tag}」嗎？`)) {
+          setGlobalCustomTags(globalCustomTags.filter(t => t !== tag));
+          removeTagFromAllStudents(tag);
+        }
+      };
+
+      // 重置當前模式的所有資料
+      const handleResetData = () => {
+        if(window.confirm(`【警告】確定要清除「英語${modeName}」的所有評審資料與自訂標籤嗎？此動作無法復原！`)) {
+          if (isReading) {
+            setReadingStudents(generateInitialStudents());
+            setReadingTags(INITIAL_READING_TAG_CATEGORIES);
+            setReadingTopics([]);
+            setReadingCustomTags([]);
+            setReadingTime({min: 2, max: 3});
+            setReadingCurrentId(1);
+          } else {
+            setSpeechStudents(generateInitialStudents());
+            setSpeechTags(INITIAL_SPEECH_TAG_CATEGORIES);
+            setSpeechTopics([]);
+            setSpeechCustomTags([]);
+            setSpeechTime({min: 3, max: 4});
+            setSpeechCurrentId(1);
+          }
+          showToast(`已重置「英語${modeName}」資料！`);
+        }
+      };
+
+      const exportSettings = () => {
+        const settingsToExport = {
+          mode: activeMode, // 加入模式檢查
+          tagCategories,
+          globalCustomTags,
+          globalTopics, 
+          minTimeLimit,
+          maxTimeLimit,
+          globalSettings
+        };
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(settingsToExport, null, 2));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", `英語${modeName}評審系統設定.json`);
+        document.body.appendChild(downloadAnchorNode); 
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+        showToast("設定檔已匯出！");
+      };
+
+      const handleImportSettings = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const imported = JSON.parse(e.target.result);
+            if(imported.mode && imported.mode !== activeMode) {
+              const importedModeName = imported.mode === 'reading' ? '朗讀' : '演說';
+              if(!window.confirm(`警告：此設定檔屬於「英語${importedModeName}」，而目前您正處於「英語${modeName}」模式。確定要強制匯入並覆蓋目前標籤設定嗎？`)) {
+                return;
+              }
+            }
+
+            if (imported.tagCategories) setTagCategories(imported.tagCategories);
+            if (imported.globalCustomTags) setGlobalCustomTags(imported.globalCustomTags);
+            
+            if (imported.globalTopics) {
+              setGlobalTopics(imported.globalTopics);
+            } else if (imported.globalTopic) {
+              setGlobalTopics([imported.globalTopic]);
+            }
+            
+            if (imported.minTimeLimit !== undefined) setMinTimeLimit(imported.minTimeLimit);
+            if (imported.maxTimeLimit !== undefined) setMaxTimeLimit(imported.maxTimeLimit);
+            if (imported.globalSettings) setGlobalSettings(imported.globalSettings);
+            showToast(`設定檔匯入成功！`);
+          } catch (error) {
+            alert("匯入失敗：檔案格式不正確或損毀。");
+          }
+        };
+        reader.readAsText(file);
+        event.target.value = '';
+      };
+
+      const getTimeStatus = (min, sec) => {
+        if (min === '' && sec === '') return null;
+        const totalSeconds = parseInt(min || 0) * 60 + parseInt(sec || 0);
+        
+        if (minTimeLimit !== '') {
+          const minSeconds = parseInt(minTimeLimit) * 60;
+          if (totalSeconds < minSeconds) return { status: 'error', message: `時間不足 ${minTimeLimit} 分鐘` };
+        }
+        
+        if (maxTimeLimit !== '') {
+          const maxSeconds = parseInt(maxTimeLimit) * 60;
+          if (totalSeconds > maxSeconds) return { status: 'error', message: `時間超過 ${maxTimeLimit} 分鐘` };
+        }
+        
+        return { status: 'success', message: '時間符合規定' };
+      };
+
+      const timeStatus = getTimeStatus(currentStudent.timeMin, currentStudent.timeSec);
+
+      const exportToPDF = () => {
+        const printWindow = window.open('', '_blank');
+        
+        let dataToPrint = studentsData.filter(s => 
+          s.generatedComment || s.selectedTags.length > 0 || s.topic || s.timeMin || s.name || s.classId || s.personalExperience
+        );
+
+        if (dataToPrint.length === 0) {
+          dataToPrint = studentsData;
+        }
+
+        const htmlContent = `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>英語${modeName}評審記錄總表</title>
+              <meta charset="utf-8">
+              <style>
+                body { font-family: 'Microsoft JhengHei', 'PingFang TC', sans-serif; padding: 20px; color: #333; }
+                h1 { text-align: center; color: #1e40af; margin-bottom: 20px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13px; }
+                th, td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; vertical-align: top; }
+                th { background-color: #f1f5f9; font-weight: bold; }
+                .text-center { text-align: center; }
+                .tags { color: #4f46e5; font-size: 12px; }
+                .experience { color: #059669; font-size: 12px; font-style: italic; margin-top: 4px; }
+                .comment { white-space: pre-wrap; line-height: 1.5; font-size: 13px; }
+                @media print {
+                   @page { margin: 1cm; size: landscape; }
+                   body { padding: 0; }
+                   .no-print { display: none; }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="no-print" style="background: #eff6ff; padding: 15px; text-align: center; border: 1px solid #bfdbfe; margin-bottom: 20px; border-radius: 8px;">
+                <strong style="color: #1e40af;">列印提示：</strong> 請在列印對話框中，將目的地選項更改為<strong>「另存為 PDF (Save as PDF)」</strong>即可完美匯出。
+                <button onclick="window.print()" style="margin-left: 15px; padding: 6px 12px; background: #4f46e5; color: white; border: none; border-radius: 4px; cursor: pointer;">立即列印 / 存為 PDF</button>
+              </div>
+              <h1>英語${modeName}評審記錄總表</h1>
+              <table>
+                <thead>
+                   <tr>
+                     <th width="5%" class="text-center">座號</th>
+                     <th width="6%" class="text-center">班級</th>
+                     <th width="8%" class="text-center">姓名</th>
+                     <th width="12%">${modeName}篇目</th>
+                     <th width="8%" class="text-center">時間</th>
+                     <th width="20%">表現點 / 補充說明</th>
+                     <th width="41%">評語</th>
+                   </tr>
+                </thead>
+                <tbody>
+                   ${dataToPrint.map(s => `
+                     <tr>
+                       <td class="text-center font-bold">${s.id}</td>
+                       <td class="text-center">${s.classId || '-'}</td>
+                       <td class="text-center font-bold">${s.name || '-'}</td>
+                       <td>${s.topic || '-'}</td>
+                       <td class="text-center">${s.timeMin ? s.timeMin + '分' + (s.timeSec || '0') + '秒' : '-'}</td>
+                       <td>
+                         <div class="tags">${s.selectedTags.join('、') || '-'}</div>
+                         ${s.personalExperience ? `<div class="experience">【補充說明】${s.personalExperience}</div>` : ''}
+                       </td>
+                       <td class="comment">${s.generatedComment || '-'}</td>
+                     </tr>
+                   `).join('')}
+                </tbody>
+              </table>
+              <script>
+                window.onload = () => { 
+                   setTimeout(() => {
+                     window.print(); 
+                   }, 800);
+                }
+              <\/script>
+            </body>
+          </html>
+        `;
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+      };
+
+      const showToast = (msg) => {
+        setToastMessage(msg);
+        setTimeout(() => setToastMessage(null), 3000);
+      };
+
+      const copyToClipboard = () => {
+        if (!currentStudent.generatedComment) return;
+        const textArea = document.createElement("textarea");
+        textArea.value = currentStudent.generatedComment;
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+          document.execCommand('copy');
+          showToast("已複製到剪貼簿！");
+        } catch (err) {
+          showToast("複製失敗。");
+        }
+        document.body.removeChild(textArea);
+      };
+
+      const clearComment = () => {
+        updateCurrentStudent({ generatedComment: '' });
+      };
+
+      const handleGenerateCommentClick = () => {
+        setIsAiModalOpen(true);
+      };
+
+      return (
+        <div className={`min-h-screen p-4 sm:p-6 font-sans text-slate-800 transition-colors duration-500 ${th.wrapper}`}>
+          
+          <input 
+            type="file" 
+            accept=".json"
+            ref={fileInputRef}
+            onChange={handleImportSettings}
+            className="hidden" 
+          />
+
+          {toastMessage && (
+            <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-800 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 animate-fade-in-down-toast">
+              <i className="fa-solid fa-circle-check text-green-400 text-[18px]"></i>
+              <span>{toastMessage}</span>
+            </div>
+          )}
+
+          {isAiModalOpen && (
+            <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[100] p-4 backdrop-blur-sm animate-fade-in">
+              <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl flex flex-col items-center text-center animate-scale-up">
+                <div className={`w-20 h-20 ${th.badge} rounded-full flex items-center justify-center text-4xl mb-4 shadow-inner`}>
+                  <i className="fa-solid fa-robot"></i>
+                </div>
+                <h3 className="text-2xl font-bold text-slate-800 mb-2">專屬評語功能</h3>
+                <p className="text-slate-600 mb-6 leading-relaxed">
+                  此為靜態網頁版<br/>請使用 <strong className={th.textDark}>AI 版工具</strong><br/>才能自動生成專屬評語！
+                </p>
+                <div className="flex flex-col gap-3 w-full">
+                  <a 
+                    href="https://gemini.google.com/share/ca0bcff39942" 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setIsAiModalOpen(false)}
+                    className={`w-full py-3 ${th.btnSolid} text-white rounded-xl font-bold transition-all shadow-md flex items-center justify-center gap-2`}
+                  >
+                    前往 AI 版工具 <i className="fa-solid fa-arrow-up-right-from-square text-[14px]"></i>
+                  </a>
+                  <button 
+                    onClick={() => setIsAiModalOpen(false)}
+                    className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors"
+                  >
+                    我知道了
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="max-w-7xl mx-auto space-y-6 flex flex-col min-h-[calc(100vh-3rem)]">
+            
+            <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className={`w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center ${th.iconWrap} flex-shrink-0 transition-colors`}>
+                  <i className="fa-solid fa-wand-magic-sparkles text-[28px]"></i>
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-wide">英語{modeName}評審快記工具</h1>
+                    <span className={`${th.badge} text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap transition-colors`}>v1.1 Pro</span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-500 mt-1">專業・高效・精準 | 專為英語競賽評審設計</p>
+                </div>
+              </div>
+              
+              <div className="flex flex-wrap items-center gap-3">
+                {/* 模式切換器 */}
+                <div className="flex bg-white rounded-full p-1 shadow-sm border border-slate-100">
+                  <button 
+                    onClick={() => { setActiveMode('reading'); setIsEditingTags(false); }}
+                    className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${isReading ? THEME_COLORS.reading.badge : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    <i className="fa-solid fa-book-open mr-1"></i> 英語朗讀
+                  </button>
+                  <button 
+                    onClick={() => { setActiveMode('speech'); setIsEditingTags(false); }}
+                    className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${!isReading ? THEME_COLORS.speech.badge : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    <i className="fa-solid fa-microphone-lines mr-1"></i> 英語演說
+                  </button>
+                </div>
+                
+                <div className="bg-white rounded-full px-4 sm:px-5 py-2 flex items-center gap-2 shadow-sm border border-slate-100 h-full">
+                  <i className={`fa-solid fa-users ${th.iconWrap} hidden sm:block text-[16px] opacity-70`}></i>
+                  <span className="text-sm font-medium text-slate-600">選手總數</span>
+                  <span className="bg-slate-100 text-slate-800 text-sm font-bold px-3 py-0.5 rounded-full">{TOTAL_STUDENTS}</span>
+                </div>
+              </div>
+            </header>
+
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col gap-4 transition-colors">
+              <div className={`flex items-center gap-2 text-sm font-bold ${th.textMedium} whitespace-nowrap`}>
+                <i className="fa-solid fa-gear text-[18px]"></i> 全域比賽設定 ({modeName})
+              </div>
+              
+              <div className="flex flex-col lg:flex-row gap-6">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-1.5 text-sm text-slate-600">
+                    <i className="fa-regular fa-clock text-slate-400 text-[16px]"></i>
+                    <span className="font-medium">時間規範：</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <input 
+                      type="number" 
+                      value={minTimeLimit} 
+                      onChange={e => setMinTimeLimit(e.target.value)} 
+                      className={`w-16 px-2 py-1.5 text-center border border-slate-200 rounded-lg bg-slate-50 ${th.ring} outline-none transition-all`}
+                      min="0" 
+                    />
+                    <span className="text-slate-400">分</span>
+                    <span className="mx-1 font-medium text-slate-500">至</span>
+                    <input 
+                      type="number" 
+                      value={maxTimeLimit} 
+                      onChange={e => setMaxTimeLimit(e.target.value)} 
+                      className={`w-16 px-2 py-1.5 text-center border border-slate-200 rounded-lg bg-slate-50 ${th.ring} outline-none transition-all`}
+                      min="0" 
+                    />
+                    <span className="text-slate-400">分</span>
+                  </div>
+                </div>
+
+                <div className="hidden lg:block w-px bg-slate-200 self-stretch mx-2"></div>
+                <div className="block lg:hidden h-px bg-slate-200 w-full"></div>
+
+                <div className="flex flex-col gap-2 flex-1">
+                  <div className="flex items-center gap-1.5 text-sm text-slate-600">
+                    <i className="fa-solid fa-list-ul text-slate-400 text-[16px]"></i>
+                    <span className="font-medium">{modeName}題庫 (新增後將顯示於下方選手專區供快速點選)：</span>
+                  </div>
+                  <div className="flex gap-2 max-w-md">
+                    <input 
+                      type="text" 
+                      value={newTopicInput} 
+                      onChange={e => setNewTopicInput(e.target.value)}
+                      onKeyPress={e => e.key === 'Enter' && handleAddTopic()}
+                      placeholder={`輸入${modeName}篇目/講題名稱...`}
+                      className={`flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-slate-50 ${th.ring} outline-none transition-all`}
+                    />
+                    <button 
+                      onClick={handleAddTopic}
+                      className={`px-3 py-1.5 ${th.btnOutline} text-sm font-medium rounded-lg transition-colors border whitespace-nowrap`}
+                    >
+                      新增篇目
+                    </button>
+                  </div>
+                  
+                  {globalTopics.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {globalTopics.map(topic => (
+                        <div key={topic} className="flex items-center bg-white border border-slate-300 text-slate-700 text-sm px-3 py-1.5 rounded-lg shadow-sm">
+                          <span>{topic}</span>
+                          <button 
+                            onClick={() => handleRemoveTopic(topic)} 
+                            className="ml-2 text-slate-400 hover:text-red-500 transition-colors"
+                            title="刪除此篇目"
+                          >
+                            <i className="fa-regular fa-trash-can text-[14px]"></i>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col lg:flex-row gap-6 flex-1">
+              
+              <div className="w-full lg:w-[280px] flex-shrink-0 bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100/50 lg:h-[calc(100vh-250px)] lg:sticky lg:top-6 overflow-y-auto custom-scrollbar">
+                <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+                  <i className="fa-solid fa-user text-slate-400 text-[20px]"></i> 選手座號
+                </h2>
+                <div className="grid grid-cols-4 lg:grid-cols-3 gap-3">
+                  {studentsData.map((student) => {
+                    const isActive = student.id === currentId;
+                    const hasComment = student.generatedComment.length > 0;
+                    const hasInfo = student.name || student.classId;
+                    
+                    return (
+                      <button
+                        key={student.id}
+                        onClick={() => setCurrentId(student.id)}
+                        className={`flex flex-col items-center justify-center p-2 h-16 rounded-2xl transition-all relative border
+                          ${isActive 
+                            ? 'bg-slate-800 text-white border-slate-800 shadow-md transform scale-105 z-10' 
+                            : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-100'}
+                        `}
+                      >
+                        <span className="text-lg font-bold leading-none">{student.id}</span>
+                        {hasInfo && (
+                          <span className={`text-[10px] mt-1 whitespace-nowrap overflow-hidden text-ellipsis w-full px-1 text-center ${isActive ? 'text-slate-300' : 'text-slate-500'}`}>
+                            {student.name || student.classId}
+                          </span>
+                        )}
+                        {hasComment && (
+                          <span className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full ${isActive ? th.dotActive : 'bg-green-400'}`}></span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex-1 space-y-6">
+                
+                <div className="bg-white rounded-3xl p-5 sm:p-8 shadow-sm border border-slate-100/50 transition-colors">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+                    <div className="flex items-center gap-4">
+                      <div className={`w-12 h-12 ${th.iconSolid} rounded-2xl flex items-center justify-center text-white shadow-inner flex-shrink-0 transition-colors`}>
+                        <i className="fa-solid fa-circle-user text-[28px]"></i>
+                      </div>
+                      <div>
+                        <h2 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-baseline gap-2">
+                          第 {currentId} 號選手
+                        </h2>
+                        <p className="text-sm text-slate-500 mt-1">
+                          已選取 <span className={`font-bold ${th.iconWrap}`}>{currentStudent.selectedTags.length}</span> 個表現點
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                      <input 
+                        type="text" 
+                        placeholder="輸入班級(選填)" 
+                        value={currentStudent.classId}
+                        onChange={(e) => updateCurrentStudent({ classId: e.target.value })}
+                        className={`w-24 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm ${th.ring} outline-none`}
+                      />
+                      <input 
+                        type="text"
+                        placeholder="輸入姓名(選填)" 
+                        value={currentStudent.name}
+                        onChange={(e) => updateCurrentStudent({ name: e.target.value })}
+                        className={`w-28 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm ${th.ring} outline-none`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mb-6 bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-100">
+                    <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                      <span className={`w-1.5 h-4 ${th.iconSolid} rounded-full`}></span> 選手{modeName}篇目
+                    </h3>
+                    {globalTopics.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {globalTopics.map(topic => {
+                          const isSelected = currentStudent.topic === topic;
+                          return (
+                            <button
+                              key={topic}
+                              onClick={() => updateCurrentStudent({ topic: isSelected ? '' : topic })}
+                              className={`px-4 py-2 rounded-xl text-sm transition-all border ${
+                                isSelected
+                                  ? th.topicActive + ' font-bold shadow-sm'
+                                  : 'bg-white border-slate-200 text-slate-600 ' + th.topicHover
+                              }`}
+                            >
+                              {topic}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-400 italic">請先於上方設定新增{modeName}篇目，此處將顯示按鈕供快速選取。</p>
+                    )}
+                  </div>
+
+                  <div className="mb-8 flex flex-col sm:flex-row sm:items-center gap-4 bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-100">
+                    <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2 sm:w-28 flex-shrink-0">
+                      <span className={`w-1.5 h-4 ${th.iconSolid} rounded-full`}></span> {modeName}時間
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="number" 
+                        min="0" max="10"
+                        value={currentStudent.timeMin}
+                        onChange={(e) => updateCurrentStudent({ timeMin: e.target.value })}
+                        className={`w-16 sm:w-20 px-2 sm:px-3 py-2 bg-white border border-slate-200 rounded-xl text-center ${th.ring} outline-none transition-all`}
+                        placeholder="分"
+                      />
+                      <span className="text-slate-500 font-medium text-sm sm:text-base">分</span>
+                      <input 
+                        type="number" 
+                        min="0" max="59"
+                        value={currentStudent.timeSec}
+                        onChange={(e) => updateCurrentStudent({ timeSec: e.target.value })}
+                        className={`w-16 sm:w-20 px-2 sm:px-3 py-2 bg-white border border-slate-200 rounded-xl text-center ${th.ring} outline-none transition-all`}
+                        placeholder="秒"
+                      />
+                      <span className="text-slate-500 font-medium text-sm sm:text-base">秒</span>
+                    </div>
+                    
+                    {timeStatus && (
+                      <div className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium w-full sm:w-auto ${timeStatus.status === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                        {timeStatus.status === 'error' ? <i className="fa-solid fa-circle-exclamation text-[16px] flex-shrink-0"></i> : <i className="fa-solid fa-circle-check text-[16px] flex-shrink-0"></i>}
+                        <span className="leading-none">{timeStatus.message}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-8 relative">
+                    <div className="flex justify-end mb-4">
+                       <button 
+                         onClick={() => setIsEditingTags(!isEditingTags)}
+                         className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors border ${isEditingTags ? 'bg-rose-100 text-rose-700 border-rose-200' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'}`}
+                       >
+                         <i className="fa-regular fa-pen-to-square text-[16px]"></i> {isEditingTags ? '結束標籤管理' : '進入標籤管理模式'}
+                       </button>
+                    </div>
+
+                    {tagCategories.map((category, idx) => (
+                      <div key={idx}>
+                        <div className="flex items-center gap-4 mb-4">
+                          <h3 className={`text-sm font-bold ${th.sectionTitle} px-4 py-1.5 rounded-full whitespace-nowrap`}>{category.title}</h3>
+                          <div className="flex-1 h-px bg-slate-100"></div>
+                        </div>
+                        
+                        <div className="space-y-4">
+                          {category.strengths.length > 0 || isEditingTags ? (
+                            <div>
+                              <div className="flex flex-wrap gap-2">
+                               {category.strengths.map((tag, tagIdx) => {
+                                  const isSelected = currentStudent.selectedTags.includes(tag);
+                                  return (
+                                    <div key={tag} className="flex items-center">
+                                      <button
+                                        onClick={() => toggleTag(tag)}
+                                        className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm transition-all border ${
+                                          isSelected && !isEditingTags
+                                            ? 'bg-emerald-100 border-emerald-300 text-emerald-800 font-bold shadow-sm' 
+                                            : 'bg-emerald-50/40 border-emerald-100 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-200'
+                                        } ${isEditingTags ? 'rounded-r-none border-r-0 cursor-default' : ''}`}
+                                      >
+                                        {tag}
+                                      </button>
+                                      {isEditingTags && (
+                                        <div className="flex items-center bg-emerald-50/40 border border-emerald-100 border-l-0 rounded-r-xl h-full px-1 gap-1">
+                                          <button onClick={() => handleMoveTag(idx, 'strengths', tagIdx, -1)} disabled={tagIdx === 0} className="text-slate-400 hover:text-emerald-600 disabled:opacity-30 p-1"><i className="fa-solid fa-arrow-left text-[14px]"></i></button>
+                                          <button onClick={() => handleMoveTag(idx, 'strengths', tagIdx, 1)} disabled={tagIdx === category.strengths.length - 1} className="text-slate-400 hover:text-emerald-600 disabled:opacity-30 p-1"><i className="fa-solid fa-arrow-right text-[14px]"></i></button>
+                                          <div className="w-px h-3 bg-emerald-200 mx-0.5"></div>
+                                          <button onClick={() => handleRemoveTag(idx, 'strengths', tagIdx)} className="text-slate-400 hover:text-rose-500 p-1"><i className="fa-regular fa-trash-can text-[14px]"></i></button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              {isEditingTags && (
+                                <div className="mt-2 flex gap-2 w-full max-w-sm">
+                                   <input 
+                                    type="text" 
+                                    placeholder="新增優點標籤..." 
+                                    value={newTagInputs[`${idx}-strengths`] || ''}
+                                    onChange={(e) => setNewTagInputs(prev => ({...prev, [`${idx}-strengths`]: e.target.value}))}
+                                    onKeyPress={(e) => e.key === 'Enter' && handleAddTag(idx, 'strengths')}
+                                    className="flex-1 px-3 py-1.5 text-sm border border-emerald-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                                   />
+                                   <button onClick={() => handleAddTag(idx, 'strengths')} className="px-3 bg-emerald-100 text-emerald-700 rounded-lg text-sm hover:bg-emerald-200"><i className="fa-solid fa-plus text-[16px]"></i></button>
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+
+                          {category.weaknesses.length > 0 || isEditingTags ? (
+                            <div>
+                              <div className="flex flex-wrap gap-2">
+                                {category.weaknesses.map((tag, tagIdx) => {
+                                  const isSelected = currentStudent.selectedTags.includes(tag);
+                                  return (
+                                    <div key={tag} className="flex items-center">
+                                      <button
+                                        onClick={() => toggleTag(tag)}
+                                        className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm transition-all border ${
+                                          isSelected && !isEditingTags
+                                            ? 'bg-orange-100 border-orange-300 text-orange-800 font-bold shadow-sm' 
+                                            : 'bg-orange-50/40 border-orange-100 text-orange-700 hover:bg-orange-100 hover:border-orange-200'
+                                        } ${isEditingTags ? 'rounded-r-none border-r-0 cursor-default' : ''}`}
+                                      >
+                                        {tag}
+                                      </button>
+                                      {isEditingTags && (
+                                        <div className="flex items-center bg-orange-50/40 border border-orange-100 border-l-0 rounded-r-xl h-full px-1 gap-1">
+                                          <button onClick={() => handleMoveTag(idx, 'weaknesses', tagIdx, -1)} disabled={tagIdx === 0} className="text-slate-400 hover:text-orange-600 disabled:opacity-30 p-1"><i className="fa-solid fa-arrow-left text-[14px]"></i></button>
+                                          <button onClick={() => handleMoveTag(idx, 'weaknesses', tagIdx, 1)} disabled={tagIdx === category.weaknesses.length - 1} className="text-slate-400 hover:text-orange-600 disabled:opacity-30 p-1"><i className="fa-solid fa-arrow-right text-[14px]"></i></button>
+                                          <div className="w-px h-3 bg-orange-200 mx-0.5"></div>
+                                          <button onClick={() => handleRemoveTag(idx, 'weaknesses', tagIdx)} className="text-slate-400 hover:text-rose-500 p-1"><i className="fa-regular fa-trash-can text-[14px]"></i></button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              {isEditingTags && (
+                                <div className="mt-2 flex gap-2 w-full max-w-sm">
+                                   <input 
+                                    type="text" 
+                                    placeholder="新增建議/待改進標籤..." 
+                                    value={newTagInputs[`${idx}-weaknesses`] || ''}
+                                    onChange={(e) => setNewTagInputs(prev => ({...prev, [`${idx}-weaknesses`]: e.target.value}))}
+                                    onKeyPress={(e) => e.key === 'Enter' && handleAddTag(idx, 'weaknesses')}
+                                    className="flex-1 px-3 py-1.5 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-400"
+                                   />
+                                   <button onClick={() => handleAddTag(idx, 'weaknesses')} className="px-3 bg-orange-100 text-orange-700 rounded-lg text-sm hover:bg-orange-200"><i className="fa-solid fa-plus text-[16px]"></i></button>
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+
+                          {idx === 0 && (
+                            <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                              <label className="block text-xs font-bold text-slate-500 mb-2 flex items-center gap-1">
+                                <i className="fa-solid fa-plus text-[12px]"></i> 補充說明 (供 AI 撰寫參考)
+                              </label>
+                              <textarea 
+                               value={currentStudent.personalExperience}
+                                onChange={(e) => updateCurrentStudent({ personalExperience: e.target.value })}
+                                placeholder={`請簡述選手${modeName}中的特殊表現或亮點...`}
+                                className={`w-full px-3 py-2 text-sm border border-slate-200 rounded-lg ${th.ring} outline-none text-slate-700 resize-none h-16`}
+                              />
+                            </div>
+                          )}
+                       </div>
+                      </div>
+                    ))}
+
+                    <div>
+                      <div className="flex items-center gap-4 mb-4">
+                        <h3 className={`text-sm font-bold ${THEME_COLORS.reading.sectionTitle} px-4 py-1.5 rounded-full whitespace-nowrap`}>全域自訂標籤</h3>
+                        <div className="flex-1 h-px bg-slate-100"></div>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        {globalCustomTags.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-3">
+                           {globalCustomTags.map(tag => {
+                              const isSelected = currentStudent.selectedTags.includes(tag);
+                              return (
+                                <div key={tag} className="relative group inline-block flex items-center">
+                                  <button
+                                    onClick={() => toggleTag(tag)}
+                                    className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm transition-all border ${
+                                      isSelected && !isEditingTags
+                                        ? 'bg-blue-100 border-blue-300 text-blue-800 font-bold shadow-sm' 
+                                        : 'bg-blue-50/40 border-blue-100 text-blue-700 hover:bg-blue-100 hover:border-blue-200'
+                                    } ${isEditingTags ? 'rounded-r-none border-r-0 cursor-default' : 'pr-8'}`}
+                                  >
+                                    {tag}
+                                  </button>
+                                  
+                                  {!isEditingTags && (
+                                    <button 
+                                      onClick={() => removeGlobalCustomTag(tag)} 
+                                      className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-300 hover:text-red-500 transition-colors p-1"
+                                      title="刪除此全域標籤"
+                                    >
+                                      <i className="fa-regular fa-trash-can text-[12px]"></i>
+                                    </button>
+                                  )}
+                                  {isEditingTags && (
+                                    <div className="flex items-center bg-blue-50/40 border border-blue-100 border-l-0 rounded-r-xl h-full px-2 gap-1">
+                                      <button onClick={() => removeGlobalCustomTag(tag)} className="text-slate-400 hover:text-rose-500 p-1"><i className="fa-regular fa-trash-can text-[14px]"></i></button>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <input 
+                            type="text" 
+                            value={newGlobalTagInput}
+                            onChange={(e) => setNewGlobalTagInput(e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && addGlobalCustomTag()}
+                            placeholder="輸入全域自訂關鍵字 (新增後所有選手皆可使用)..."
+                            className="flex-1 px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none text-sm text-slate-700"
+                          />
+                          <button 
+                           onClick={addGlobalCustomTag}
+                            className="px-4 bg-blue-500 hover:bg-blue-600 text-white rounded-xl flex items-center justify-center transition-colors text-sm font-medium shadow-sm"
+                          >
+                            新增標籤
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100/50 flex flex-col xl:flex-row xl:items-center gap-6 justify-between relative overflow-hidden transition-colors">
+                  <div className={`absolute top-0 right-0 w-64 h-64 ${th.badge} opacity-50 rounded-full blur-3xl pointer-events-none -translate-y-1/2 translate-x-1/2`}></div>
+                  
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8 relative z-10 w-full xl:w-auto">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
+                      <span className="text-sm font-bold text-slate-500 flex-shrink-0">語氣設定</span>
+                      <div className="flex flex-wrap bg-slate-100 p-1 rounded-xl w-full sm:w-auto">
+                        {TONES.map(t => (
+                          <button
+                            key={t.id}
+                            onClick={() => setGlobalSettings(prev => ({ ...prev, tone: t.id }))}
+                            className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${globalSettings.tone === t.id ? `bg-white ${th.iconWrap} shadow-sm` : 'text-slate-500 hover:text-slate-700'}`}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
+                      <span className="text-sm font-bold text-slate-500 flex-shrink-0">字數長度</span>
+                      <div className="flex flex-wrap bg-slate-100 p-1 rounded-xl w-full sm:w-auto">
+                        {LENGTHS.map(l => (
+                          <button
+                            key={l.id}
+                            onClick={() => setGlobalSettings(prev => ({ ...prev, length: l.id }))}
+                            className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${globalSettings.length === l.id ? `bg-white ${th.iconWrap} shadow-sm` : 'text-slate-500 hover:text-slate-700'}`}
+                          >
+                            {l.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={exportToPDF}
+                    className={`relative z-10 w-full xl:w-auto px-6 sm:px-8 py-3.5 sm:py-4 ${th.btnSolid} text-white rounded-2xl font-bold text-base sm:text-lg flex items-center justify-center gap-3 transition-all hover:-translate-y-0.5`}
+                  >
+                    <i className="fa-solid fa-print text-[20px]"></i>
+                    匯出 PDF 總表
+                  </button>
+                </div>
+
+                <div className="bg-white rounded-3xl p-5 sm:p-8 shadow-sm border border-slate-100 relative transition-colors">
+                  <div className={`absolute -top-4 left-4 sm:left-6 ${th.iconSolid} text-white text-xs sm:text-sm font-bold px-3 sm:px-4 py-1 sm:py-1.5 rounded-full shadow-md flex items-center gap-2`}>
+                    <i className="fa-solid fa-wand-magic-sparkles text-[14px]"></i> 產出結果：{currentId} 號 {currentStudent.name}
+                  </div>
+                  
+                  <div className="mt-4 sm:mt-2">
+                    {currentStudent.generatedComment ? (
+                      <textarea 
+                       value={currentStudent.generatedComment}
+                        onChange={(e) => updateCurrentStudent({ generatedComment: e.target.value })}
+                        className={`w-full h-48 sm:h-56 p-4 sm:p-5 ${th.textareaBg} rounded-2xl outline-none text-slate-700 text-base sm:text-lg leading-relaxed resize-none transition-all`}
+                      />
+                    ) : (
+                      <div className="w-full h-48 sm:h-56 flex flex-col items-center justify-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-100 border-dashed">
+                        <i className="fa-solid fa-wand-magic-sparkles text-[32px] mb-3 opacity-20"></i>
+                        <p className="text-sm sm:text-base">請選取標籤後點擊生成...</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row justify-end gap-3 mt-4">
+                    <button 
+                      onClick={clearComment}
+                     disabled={!currentStudent.generatedComment}
+                      className="w-full sm:w-auto px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50 text-sm sm:text-base"
+                    >
+                      <i className="fa-regular fa-trash-can text-[18px]"></i> 清除
+                    </button>
+                    <button 
+                      onClick={copyToClipboard}
+                     disabled={!currentStudent.generatedComment}
+                      className={`w-full sm:w-auto px-6 py-2 ${th.btnOutline} rounded-xl font-medium flex items-center justify-center gap-2 transition-all disabled:opacity-50 text-sm sm:text-base`}
+                    >
+                      <i className="fa-regular fa-copy text-[18px]"></i> 複製此筆評語
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-slate-800 rounded-3xl p-4 sm:p-5 shadow-lg flex flex-col lg:flex-row lg:items-center justify-between gap-4 mt-6">
+                   <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                     <button 
+                       onClick={() => fileInputRef.current.click()}
+                       className="flex-1 lg:flex-none justify-center bg-slate-700 hover:bg-slate-600 text-slate-200 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors border border-slate-600"
+                     >
+                       <i className="fa-solid fa-file-arrow-up text-[16px]"></i> 匯入設定
+                     </button>
+                     <button 
+                       onClick={exportSettings}
+                       className="flex-1 lg:flex-none justify-center bg-slate-700 hover:bg-slate-600 text-slate-200 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors border border-slate-600"
+                     >
+                       <i className="fa-solid fa-file-arrow-down text-[16px]"></i> 匯出設定
+                     </button>
+                     <button 
+                       onClick={handleResetData}
+                       className="flex-1 lg:flex-none justify-center bg-rose-900/40 hover:bg-rose-900/60 text-rose-300 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors border border-rose-800/50"
+                     >
+                       <i className="fa-solid fa-rotate-left text-[16px]"></i> 重置資料
+                     </button>
+                     
+                     <div className="hidden lg:block w-px h-6 bg-slate-600 mx-1"></div>
+                     
+                     <button 
+                       onClick={handleGenerateCommentClick}
+                       className={`w-full lg:w-auto justify-center ${th.btnSolid} text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors shadow-md`}
+                     >
+                       <i className="fa-solid fa-play text-[16px]"></i>
+                       生成專屬評語
+                     </button>
+                   </div>
+                   
+                   <div>
+                     <a 
+                       href="https://gemini.google.com/share/ca0bcff39942" 
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-500 hover:to-teal-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-md shadow-emerald-500/20 w-full lg:w-auto justify-center"
+                     >
+                       前往 AI 版工具 <i className="fa-solid fa-arrow-up-right-from-square text-[16px]"></i>
+                     </a>
+                   </div>
+                </div>
+
+              </div>
+            </div>
+
+            <footer className="mt-auto pt-6 pb-4 text-center border-t border-slate-200/60">
+              <div className="flex items-center justify-center gap-2 text-emerald-600 font-bold text-xs sm:text-sm mb-3 bg-emerald-50 inline-flex px-4 py-1.5 rounded-full border border-emerald-100">
+                <i className="fa-solid fa-cloud-arrow-up text-[16px]"></i>
+                <span>系統已啟用本地端自動儲存，您的評審資料將安全保留於此瀏覽器中。</span>
+              </div>
+              <p className="text-slate-400 text-xs sm:text-sm font-medium tracking-wide block">
+                © {new Date().getFullYear()} 奕鈞老師 版權所有 | 英語朗讀/演說評審快記工具
+              </p>
+            </footer>
+
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
